@@ -15,6 +15,19 @@ from nba_api.stats.endpoints import LeagueGameLog, LeagueLeaders, PlayerCareerSt
 from nba_api.stats.library.parameters import SeasonTypeAllStar
 from nba_api.stats.static import players as nba_players
 
+NBA_HEADERS = {
+    "Host": "stats.nba.com",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "x-nba-stats-origin": "stats",
+    "x-nba-stats-token": "true",
+    "Connection": "keep-alive",
+    "Referer": "https://stats.nba.com/",
+    "Origin": "https://www.nba.com",
+}
+
 
 TODAY = datetime.now()
 MONTH = TODAY.month
@@ -52,6 +65,7 @@ def fetch_games_on_this_day() -> list[dict]:
                     player_or_team_abbreviation="P",
                     date_from_nullable=date_str,
                     date_to_nullable=date_str,
+                    headers=NBA_HEADERS,
                 )
                 df = log.get_data_frames()[0]
                 if df.empty:
@@ -145,6 +159,7 @@ def check_scoring_champion(player_name: str, season_year: int) -> float | None:
             season_type_all_star="Regular Season",
             per_mode_simple="PerGame",
             stat_category_abbreviation="PTS",
+            headers=NBA_HEADERS,
         )
         df = leaders.get_data_frames()[0]
         if df.empty:
@@ -168,7 +183,7 @@ def check_career_milestone(player_name: str, season_year: int) -> str | None:
         return None
     player_id = matches[0]["id"]
     try:
-        career = PlayerCareerStats(player_id=player_id)
+        career = PlayerCareerStats(player_id=player_id, headers=NBA_HEADERS)
         df = career.get_data_frames()[0]
         if df.empty:
             return None

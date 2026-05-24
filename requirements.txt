@@ -1,2 +1,2 @@
-nba_api
+nba_api==1.4.1
 tweepy

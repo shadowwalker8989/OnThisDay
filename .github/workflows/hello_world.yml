@@ -1,0 +1,40 @@
+name: Post Hello World Tweet
+
+on:
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    env:
+      TWITTER_API_KEY:       ${{ secrets.TWITTER_API_KEY }}
+      TWITTER_API_SECRET:    ${{ secrets.TWITTER_API_SECRET }}
+      TWITTER_ACCESS_TOKEN:  ${{ secrets.TWITTER_ACCESS_TOKEN }}
+      TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tweepy
+        run: pip install tweepy
+
+      - name: Post tweet
+        run: |
+          python - <<'EOF'
+          import os, tweepy
+          client = tweepy.Client(
+              consumer_key=os.environ["TWITTER_API_KEY"],
+              consumer_secret=os.environ["TWITTER_API_SECRET"],
+              access_token=os.environ["TWITTER_ACCESS_TOKEN"],
+              access_token_secret=os.environ["TWITTER_ACCESS_SECRET"],
+          )
+          text = "🏀 Hey NBA fans! I'm @NBA_ON_Thisday — every day I'll post the greatest NBA performance that happened on this date in history. Follow along for daily doses of basketball history. #NBA #OnThisDay"
+          r = client.create_tweet(text=text)
+          print(f"Posted! Tweet ID: {r.data['id']}")
+          EOF

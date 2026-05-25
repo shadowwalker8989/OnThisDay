@@ -10,13 +10,13 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+import requests
 import tweepy
-from nba_api.library.http import NBAStatsHTTP
 from nba_api.stats.endpoints import LeagueGameLog, LeagueLeaders, PlayerCareerStats
-from nba_api.stats.library.parameters import SeasonTypeAllStar
 from nba_api.stats.static import players as nba_players
 
-NBAStatsHTTP.headers = {
+# Inject browser-like headers for all stats.nba.com requests to avoid IP blocks
+_NBA_HEADERS = {
     "Host": "stats.nba.com",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -28,6 +28,16 @@ NBAStatsHTTP.headers = {
     "Referer": "https://stats.nba.com/",
     "Origin": "https://www.nba.com",
 }
+_orig_request = requests.Session.request
+
+def _inject_nba_headers(self, method, url, **kwargs):
+    if "nba.com" in (url or ""):
+        base = dict(_NBA_HEADERS)
+        base.update(kwargs.get("headers") or {})
+        kwargs["headers"] = base
+    return _orig_request(self, method, url, **kwargs)
+
+requests.Session.request = _inject_nba_headers
 
 
 TODAY = datetime.now()

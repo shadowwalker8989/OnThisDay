@@ -15,7 +15,9 @@ import tweepy
 from nba_api.stats.endpoints import LeagueGameLog, LeagueLeaders, PlayerCareerStats
 from nba_api.stats.static import players as nba_players
 
-# Inject browser-like headers for all stats.nba.com requests to avoid IP blocks
+# Inject browser-like headers (and optional proxy) for all stats.nba.com requests.
+# stats.nba.com blocks GitHub Actions datacenter IPs; set NBA_PROXY to a
+# residential/proxy URL (e.g. ScraperAPI) to bypass the block.
 _NBA_HEADERS = {
     "Host": "stats.nba.com",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -28,6 +30,7 @@ _NBA_HEADERS = {
     "Referer": "https://stats.nba.com/",
     "Origin": "https://www.nba.com",
 }
+_NBA_PROXY = os.environ.get("NBA_PROXY", "").strip() or None
 _orig_request = requests.Session.request
 
 def _inject_nba_headers(self, method, url, **kwargs):
@@ -35,6 +38,8 @@ def _inject_nba_headers(self, method, url, **kwargs):
         base = dict(_NBA_HEADERS)
         base.update(kwargs.get("headers") or {})
         kwargs["headers"] = base
+        if _NBA_PROXY:
+            kwargs.setdefault("proxies", {"http": _NBA_PROXY, "https": _NBA_PROXY})
     return _orig_request(self, method, url, **kwargs)
 
 requests.Session.request = _inject_nba_headers

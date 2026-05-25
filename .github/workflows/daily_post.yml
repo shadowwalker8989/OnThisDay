@@ -25,7 +25,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install nba_api tweepy
+        run: pip install -r requirements.txt
 
       - name: Run post.py
         run: python post.py

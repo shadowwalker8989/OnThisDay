@@ -10,71 +10,74 @@ if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import tweepy
-from basketball_reference_web_scraper import client as bref
+from bs4 import BeautifulSoup
+from curl_cffi import requests as curl_requests
 
 
 TODAY = datetime.now()
 MONTH = TODAY.month
 DAY = TODAY.day
-FIRST_CAL_YEAR = 1946  # basketball-reference covers from the 1946-47 BAA/NBA season
-
-_TEAM_ABBR = {
-    "Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN",
-    "Charlotte Hornets": "CHA", "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE",
-    "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN", "Detroit Pistons": "DET",
-    "Golden State Warriors": "GSW", "Houston Rockets": "HOU", "Indiana Pacers": "IND",
-    "Los Angeles Clippers": "LAC", "Los Angeles Lakers": "LAL", "Memphis Grizzlies": "MEM",
-    "Miami Heat": "MIA", "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN",
-    "New Orleans Pelicans": "NOP", "New York Knicks": "NYK", "Oklahoma City Thunder": "OKC",
-    "Orlando Magic": "ORL", "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX",
-    "Portland Trail Blazers": "POR", "Sacramento Kings": "SAC", "San Antonio Spurs": "SAS",
-    "Toronto Raptors": "TOR", "Utah Jazz": "UTA", "Washington Wizards": "WAS",
-    "Seattle SuperSonics": "SEA", "New Jersey Nets": "NJN", "New Orleans Hornets": "NOH",
-    "Vancouver Grizzlies": "VAN", "Philadelphia Warriors": "PHW", "San Francisco Warriors": "SFW",
-    "St. Louis Hawks": "STL", "Baltimore Bullets": "BAL", "Washington Bullets": "WSB",
-    "Capital Bullets": "CAP", "Kansas City Kings": "KCK", "Buffalo Braves": "BUF",
-    "Cincinnati Royals": "CIN", "Minneapolis Lakers": "MNL", "San Diego Rockets": "SDR",
-    "San Diego Clippers": "SDC", "Chicago Zephyrs": "CHZ", "Chicago Packers": "CHP",
-    "New Orleans Jazz": "NOJ", "New York Nets": "NYN", "Milwaukee Hawks": "MLH",
-    "Tri-Cities Blackhawks": "TCB", "Rochester Royals": "ROC", "Syracuse Nationals": "SYR",
-    "Fort Wayne Pistons": "FTW", "Anderson Packers": "AND", "Chicago Stags": "CHS",
-    "Cleveland Rebels": "CRB", "Pittsburgh Ironmen": "PIT", "Toronto Huskies": "TRH",
-    "Washington Capitols": "WAC", "Providence Steamrollers": "PRO", "Sheboygan Redskins": "SHE",
-    "Waterloo Hawks": "WAT", "Indianapolis Olympians": "INO",
-}
+FIRST_CAL_YEAR = 1946
 
 
-def _team_to_abbr(team) -> str:
-    name = team.value
-    if name in _TEAM_ABBR:
-        return _TEAM_ABBR[name]
-    words = name.split()
-    return "".join(w[0] for w in words)[:3].upper()
+def _fetch_daily_leaders(month: int, day: int, year: int) -> str:
+    url = (
+        f"https://www.basketball-reference.com/friv/dailyleaders.fcgi"
+        f"?month={month}&day={day}&year={year}&type=all"
+    )
+    resp = curl_requests.get(url, impersonate="chrome124", timeout=30)
+    resp.raise_for_status()
+    return resp.text
+
+
+def _parse_box_scores(html: str, cal_year: int) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.find("table", {"id": "stats"})
+    if table is None:
+        return []
+
+    def td(row, stat: str) -> str:
+        cell = row.find("td", {"data-stat": stat})
+        return cell.get_text(strip=True) if cell else ""
+
+    def nt(row, stat: str) -> int:
+        val = td(row, stat)
+        try:
+            return int(val) if val else 0
+        except ValueError:
+            return 0
+
+    results = []
+    for row in table.select("tbody tr"):
+        if "thead" in (row.get("class") or []):
+            continue
+        player = td(row, "player")
+        if not player:
+            continue
+        team = td(row, "team_id")
+        opp = td(row, "opp_id")
+        results.append({
+            "player_name": player,
+            "team": team,
+            "pts": nt(row, "pts"),
+            "reb": nt(row, "trb"),
+            "ast": nt(row, "ast"),
+            "stl": nt(row, "stl"),
+            "blk": nt(row, "blk"),
+            "matchup": f"{team} vs. {opp}",
+            "season_year": cal_year,
+            "game_date": f"{MONTH:02d}/{DAY:02d}/{cal_year}",
+        })
+    return results
 
 
 def fetch_games_on_this_day() -> list[dict]:
     all_games = []
     for cal_year in range(FIRST_CAL_YEAR, TODAY.year + 1):
         try:
-            rows = bref.player_box_scores(day=DAY, month=MONTH, year=cal_year)
-            for row in rows:
-                if not row.get("seconds_played"):
-                    continue
-                reb = int(row.get("offensive_rebounds", 0)) + int(row.get("defensive_rebounds", 0))
-                team = row["team"]
-                opp = row["opponent"]
-                all_games.append({
-                    "player_name": row["name"],
-                    "team": _team_to_abbr(team),
-                    "pts": int(row.get("points", 0)),
-                    "reb": reb,
-                    "ast": int(row.get("assists", 0)),
-                    "stl": int(row.get("steals", 0)),
-                    "blk": int(row.get("blocks", 0)),
-                    "matchup": f"{team.value} vs. {opp.value}",
-                    "season_year": cal_year,
-                    "game_date": f"{MONTH:02d}/{DAY:02d}/{cal_year}",
-                })
+            html = _fetch_daily_leaders(MONTH, DAY, cal_year)
+            rows = _parse_box_scores(html, cal_year)
+            all_games.extend(rows)
             time.sleep(1.5)
         except Exception as exc:
             print(f"  Warning: {cal_year} failed — {exc}", file=sys.stderr)

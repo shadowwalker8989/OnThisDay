@@ -2,12 +2,12 @@ name: Daily NBA On This Day
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # 12:00 UTC every day
+    - cron: "0 6 * * *"    # 06:00 UTC = 07:00 BST every day
   workflow_dispatch:         # allow manual runs for testing
 
 jobs:
   post:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     env:
       TWITTER_API_KEY:       ${{ secrets.TWITTER_API_KEY }}
